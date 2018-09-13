@@ -1,5 +1,16 @@
 /**
  * Copyright Google LLC
+ * Modifications copyright (C) 2018 gbosetti
+ * (https://github.com/gbosetti)
+ *
+ * The content of this file was modified by gbosetti ( https://github.com/gbosetti ) 
+ * It is an extension of the Progress bar add-on for Google Slides project 
+ * ( https://github.com/gsuitedevs/apps-script-samples/tree/master/slides/progress 
+ * commit 5444187e0e76ada8e15a4c22f856b75191538971 ),
+ * explained in the Quickstart section of the G Suite team
+ * ( https://developers.google.com/gsuite/add-ons/editors/slides/quickstart/progress-bar ).
+ * This extended version improves the addon by allowing end users to customize 
+ * the progress bar through a UI, and also adding page numbers in any of the 4 corners of the slides.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,51 +24,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// [START apps_script_slides_progress]
-/**
- * @OnlyCurrentDoc Adds progress bars to a presentation.
- */
-var BAR_ID = 'PROGRESS_BAR_ID';
-var BAR_HEIGHT = 10; // px
-var presentation = SlidesApp.getActivePresentation();
 
-/**
- * Runs when the add-on is installed.
- * @param {object} e The event parameter for a simple onInstall trigger. To
- *     determine which authorization mode (ScriptApp.AuthMode) the trigger is
- *     running in, inspect e.authMode. (In practice, onInstall triggers always
- *     run in AuthMode.FULL, but onOpen triggers may be AuthMode.LIMITED or
- *     AuthMode.NONE.)
- */
+var presentation = SlidesApp.getActivePresentation();
+var BAR_ID = 'progress_bar';
+var BOX_ID = 'page_number';
+
 function onInstall(e) {
   onOpen();
 }
 
-/**
- * Trigger for opening a presentation.
- * @param {object} e The onOpen event.
- */
 function onOpen(e) {
   SlidesApp.getUi().createAddonMenu()
-      .addItem('Show progress bar', 'createBars')
-      .addItem('Hide progress bar', 'deleteBars')
+      .addItem('Show editor', 'openEditor')
       .addToUi();
 }
 
 /**
- * Create a rectangle on every slide with different bar widths.
+ * Opens a sidebar in the document containing the add-on's user interface.
  */
-function createBars() {
-  deleteBars(); // Delete any existing progress bars
+function openEditor(){
+  var ui = HtmlService.createHtmlOutputFromFile('sidebar')
+      .setTitle('Slides progress and numbers');
+  SlidesApp.getUi().showSidebar(ui);
+}
+
+/**
+ * Create the "progress bar" elements across all the slides in the document
+ */
+function createBars(barHeight, barColor, skipLatestSlides, bottomPosition) {
+  deleteBars(); 
+  
   var slides = presentation.getSlides();
-  for (var i = 0; i < slides.length; ++i) {
-    var ratioComplete = (i / (slides.length - 1));
+  var numSlides = slides.length - skipLatestSlides;
+      
+  for (var i = 0; i < numSlides; ++i) {
+    var ratioComplete = (i / (numSlides - 1));
     var x = 0;
-    var y = presentation.getPageHeight() - BAR_HEIGHT;
+    var y = bottomPosition=="true"? presentation.getPageHeight() - barHeight : 0;
     var barWidth = presentation.getPageWidth() * ratioComplete;
-    if (barWidth > 0) {
-      var bar = slides[i].insertShape(SlidesApp.ShapeType.RECTANGLE, x, y,
-                                      barWidth, BAR_HEIGHT);
+    
+    if (barWidth > 2) {
+      var bar = slides[i].insertShape(SlidesApp.ShapeType.RECTANGLE, x, y, barWidth, barHeight);
+      bar.getFill().setSolidFill(barColor);
       bar.getBorder().setTransparent();
       bar.setLinkUrl(BAR_ID);
     }
@@ -65,7 +73,7 @@ function createBars() {
 }
 
 /**
- * Deletes all progress bar rectangles.
+ * Delete the "progress bar" elements across all the slides in the document
  */
 function deleteBars() {
   var slides = presentation.getSlides();
@@ -73,12 +81,51 @@ function deleteBars() {
     var elements = slides[i].getPageElements();
     for (var j = 0; j < elements.length; ++j) {
       var el = elements[j];
-      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE &&
-          el.asShape().getLink() &&
-          el.asShape().getLink().getUrl() === BAR_ID) {
-        el.remove();
+      if (el.getPageElementType() === SlidesApp.PageElementType.SHAPE && el.asShape().getLink() && el.asShape().getLink().getUrl() === BAR_ID) {
+          el.remove();
       }
     }
   }
 }
-// [END apps_script_slides_progress]
+
+/**
+ * Create the page number elements across all the slides in the document
+ */
+function createPageNumbers(fontColor, fontSize, boxHeight, boxWidth, skipLatestSlides, barPosition) {
+  removePageNumbers();
+  
+  var boxFont = "Alegreya";
+  var slides = presentation.getSlides();
+  var boxX = barPosition.indexOf("right") != -1? presentation.getPageWidth() - boxWidth : boxWidth / 2;
+  var boxY = barPosition.indexOf("Top") != -1? 0 : presentation.getPageHeight() - (boxHeight*2);
+  var numSlides = slides.length - skipLatestSlides;
+  
+  for (var i = 1; i < numSlides; ++i) {
+      
+      var shape = slides[i].insertShape(SlidesApp.ShapeType.TEXT_BOX, boxX, boxY, boxWidth, boxHeight);
+      shape.getText().setText(i+1);
+      shape.getText().getTextStyle().setFontFamily(boxFont);
+      shape.getText().getTextStyle().setFontSize(fontSize);
+      shape.getText().getTextStyle().setForegroundColor(fontColor);
+      shape.setLinkUrl(BOX_ID);
+  }
+}
+
+/**
+ * Removes the page number elements across all the slides in the document
+ */
+function removePageNumbers() {
+  
+  var slides = presentation.getSlides();
+  for (var i = 0; i < slides.length; ++i) {
+    var elements = slides[i].getPageElements();
+    
+    for (var j = 0; j < elements.length; ++j) {
+      if (elements[j].getPageElementType() === SlidesApp.PageElementType.SHAPE &&
+          elements[j].asShape().getLink() &&
+          elements[j].asShape().getLink().getUrl() === BOX_ID) {
+        elements[j].remove();
+      }
+    }
+  }
+}
